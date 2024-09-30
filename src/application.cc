@@ -147,7 +147,10 @@ void Application::dispatch_compute_shaders() const {
   } ();
   screen_compute_shader->set_uniform("seed", seed);
 
-  glDispatchCompute(config.sim_res_x, config.sim_res_y, 1);
+  static glm::ivec3 local_group_size = screen_compute_shader->local_group_size();
+  unsigned int group_count_x = (config.sim_res_x + local_group_size.x - 1) / local_group_size.x;
+  unsigned int group_count_y = (config.sim_res_y + local_group_size.y - 1) / local_group_size.y;
+  glDispatchCompute(group_count_x, group_count_y, 1);
   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 

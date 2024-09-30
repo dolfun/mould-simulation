@@ -99,3 +99,9 @@ template <>
 void ShaderProgram::set_uniform<glm::vec4>(const std::string& name, const glm::vec4& val) const {
   glUniform4fv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
 }
+
+glm::ivec3 ComputeShaderProgram::local_group_size() const {
+  glm::ivec3 local_group_size;
+  glGetProgramiv(id, GL_COMPUTE_WORK_GROUP_SIZE, reinterpret_cast<GLint*>(&local_group_size));
+  return local_group_size;
+}

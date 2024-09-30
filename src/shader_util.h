@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <glm/vec3.hpp>
 
 class Shader {
 public:
@@ -48,4 +49,6 @@ class ComputeShaderProgram : public ShaderProgram {
 public:
   ComputeShaderProgram(const Shader& compute_shader)
     : ShaderProgram { compute_shader.id } {}
+
+  glm::ivec3 local_group_size() const;
 };
