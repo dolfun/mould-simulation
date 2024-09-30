@@ -7,11 +7,15 @@
 #include <stdexcept>
 #include <vector>
 #include <random>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
 #define WINDOW_TITLE "Mould Simulation"
 
 Application::Application(const ApplicationConfig& _config) : config { _config } {
   init_context();
+  init_imgui();
   init_screen_quad();
   init_screen_quad_shader();
   init_agents_ssbo();
@@ -32,11 +36,20 @@ Application::~Application() {
   glDeleteTextures(2, screen_textures.data());
   screen_update_shader.reset();
 
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+
   glfwTerminate();
 }
 
 void Application::run() {
   while (!glfwWindowShouldClose(window)) {
+    glfwPollEvents();
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
     static float prev_time = glfwGetTime();
     float current_time = glfwGetTime();
     delta_time = current_time - prev_time;
@@ -57,8 +70,14 @@ void Application::run() {
     glClear(GL_COLOR_BUFFER_BIT);
     render_screen_quad();
 
+    if (to_render_ui) {
+      render_ui();
+    }
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     glfwSwapBuffers(window);
-    glfwPollEvents();
   }
 }
 
@@ -86,6 +105,20 @@ void Application::init_context() {
   }
 
   glViewport(0, 0, config.window_x, config.window_y);
+}
+
+void Application::init_imgui() {
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO();
+  io.Fonts->AddFontFromFileTTF("VeraMono.ttf", 17.5);
+
+  ImGui_ImplGlfw_InitForOpenGL(window, true);
+  ImGui_ImplOpenGL3_Init();
+}
+
+void Application::render_ui() const {
+  ImGui::ShowDemoWindow();
 }
 
 void Application::init_screen_quad() {
@@ -227,5 +260,14 @@ void Application::update_title() {
 void Application::process_input() {
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
     glfwSetWindowShouldClose(window, GLFW_TRUE);
+  }
+
+  static bool to_render_ui_key_pressed = false;
+  if (glfwGetKey(window, GLFW_KEY_F12) == GLFW_PRESS && !to_render_ui_key_pressed) {
+    to_render_ui_key_pressed = true;
+    to_render_ui = !to_render_ui;
+
+  } else if (glfwGetKey(window, GLFW_KEY_F12) == GLFW_RELEASE) {
+    to_render_ui_key_pressed = false;
   }
 }

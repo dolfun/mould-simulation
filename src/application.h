@@ -31,6 +31,10 @@ private:
   GLFWwindow* window;
   void init_context();
 
+  bool to_render_ui = true;
+  void init_imgui();
+  void render_ui() const;
+
   unsigned int screen_quad_vao, screen_quad_vbo, scree_quad_ebo;
   std::unique_ptr<GraphicsShaderProgram> screen_quad_shader;
   void init_screen_quad();
