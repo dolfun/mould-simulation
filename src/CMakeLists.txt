@@ -15,5 +15,6 @@ function (add_shader src)
   configure_file(${src} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${src} COPYONLY)
 endfunction()
 
-add_shader(shaders/screen_quad.vs)
-add_shader(shaders/screen_quad.fs)
+add_shader(shaders/screen_quad.vert)
+add_shader(shaders/screen_quad.frag)
+add_shader(shaders/screen_quad.comp)

@@ -15,6 +15,7 @@ public:
 
 private:
   friend class GraphicsShaderProgram;
+  friend class ComputeShaderProgram;
   unsigned int id;
 };
 
@@ -29,6 +30,9 @@ public:
 
   void use() const;
 
+  template <typename T>
+  void set_uniform(const std::string&, const T&) const;
+
 protected:
   ShaderProgram(std::initializer_list<unsigned int>);
   unsigned int id;
@@ -38,4 +42,10 @@ class GraphicsShaderProgram : public ShaderProgram {
 public:
   GraphicsShaderProgram(const Shader& vertex_shader, const Shader& fragment_shader)
     : ShaderProgram { { vertex_shader.id, fragment_shader.id } } {}
+};
+
+class ComputeShaderProgram : public ShaderProgram {
+public:
+  ComputeShaderProgram(const Shader& compute_shader)
+    : ShaderProgram { compute_shader.id } {}
 };

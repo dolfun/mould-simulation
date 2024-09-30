@@ -1,5 +1,6 @@
 #include "shader_util.h"
 #include <glad/glad.h>
+#include <glm/glm.hpp>
 #include <fstream>
 #include <array>
 #include <stdexcept>
@@ -57,4 +58,44 @@ ShaderProgram::~ShaderProgram() {
 
 void ShaderProgram::use() const {
   glUseProgram(id);
+}
+
+template <>
+void ShaderProgram::set_uniform<int>(const std::string& name, const int& val) const {
+  glUniform1i(glGetUniformLocation(id, name.c_str()), val);
+}
+
+template <>
+void ShaderProgram::set_uniform<float>(const std::string& name, const float& val) const {
+  glUniform1f(glGetUniformLocation(id, name.c_str()), val);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::ivec2>(const std::string& name, const glm::ivec2& val) const {
+  glUniform2iv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::ivec3>(const std::string& name, const glm::ivec3& val) const {
+  glUniform3iv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::ivec4>(const std::string& name, const glm::ivec4& val) const {
+  glUniform4iv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::vec2>(const std::string& name, const glm::vec2& val) const {
+  glUniform2fv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::vec3>(const std::string& name, const glm::vec3& val) const {
+  glUniform3fv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
+}
+
+template <>
+void ShaderProgram::set_uniform<glm::vec4>(const std::string& name, const glm::vec4& val) const {
+  glUniform4fv(glGetUniformLocation(id, name.c_str()), 1, &val[0]);
 }
