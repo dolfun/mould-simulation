@@ -1,0 +1,51 @@
+#version 450 core
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (rgba32f, binding = 0) uniform image2D inputImage;
+layout (rgba32f, binding = 1) uniform image2D outputImage;
+
+struct Agent {
+  vec2 pos;
+  vec2 vel;
+};
+
+layout(std430, binding = 0) buffer agents_SSBO {
+  Agent agents[];
+};
+
+uniform int seed;
+uniform ivec2 resolution;
+uniform uint agent_count;
+uniform float dt;
+
+void main() {
+  uint id = gl_GlobalInvocationID.x;
+  if (id >= agent_count) return;
+
+  vec2 pos = agents[id].pos, vel = agents[id].vel;
+
+  pos += vel * dt;
+  if (pos.x < 0.0) {
+    pos.x = 0.0;
+    vel.x *= -1.0;
+  }
+
+  if (pos.x > 1.0) {
+    pos.x = 1.0;
+    vel.x *= -1.0;
+  }
+
+  if (pos.y < 0.0) {
+    pos.y = 0.0;
+    vel.y *= -1.0;
+  }
+
+  if (pos.y > 1.0) {
+    pos.y = 1.0;
+    vel.y *= -1.0;
+  }
+
+  ivec2 texelCoord = ivec2(round(pos * vec2(resolution)));
+  imageStore(outputImage, texelCoord, vec4(1.0));
+
+  agents[id].pos = pos, agents[id].vel = vel;
+}

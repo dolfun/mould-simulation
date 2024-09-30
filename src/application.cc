@@ -1,9 +1,11 @@
 #include "application.h"
 #include <glm/glm.hpp>
+#include <glm/ext/scalar_constants.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <fmt/core.h>
 #include <stdexcept>
+#include <vector>
 #include <random>
 
 #define WINDOW_TITLE "Mould Simulation"
@@ -11,19 +13,24 @@
 Application::Application(const ApplicationConfig& _config) : config { _config } {
   init_context();
   init_screen_quad();
-  init_screen_quad_shaders();
-  init_screen_texture();
-  init_compute_shaders();
+  init_screen_quad_shader();
+  init_agents_ssbo();
+  init_agents_update_shader();
+  init_screen_textures();
+  init_screen_update_shader();
 }
 
 Application::~Application() {
-  glDeleteVertexArrays(1, &screen_quad_VAO);
-  glDeleteBuffers(1, &screen_quad_VBO);
-  glDeleteBuffers(1, &screen_quad_EBO);
+  glDeleteVertexArrays(1, &screen_quad_vao);
+  glDeleteBuffers(1, &screen_quad_vbo);
+  glDeleteBuffers(1, &scree_quad_ebo);
   screen_quad_shader.reset();
 
-  glDeleteTextures(1, &screen_texture);
-  screen_compute_shader.reset();
+  glDeleteBuffers(1, &agents_ssbo);
+  agents_update_shader.reset();
+
+  glDeleteTextures(2, screen_textures.data());
+  screen_update_shader.reset();
 
   glfwTerminate();
 }
@@ -38,7 +45,13 @@ void Application::run() {
     update_title();
     process_input();
 
-    dispatch_compute_shaders();
+    dispatch_agents_update_shader();
+    dispatch_screen_update_shader();
+    glCopyImageSubData(
+      screen_textures[0], GL_TEXTURE_2D, 0, 0, 0, 0,
+      screen_textures[1], GL_TEXTURE_2D, 0, 0, 0, 0,
+      config.sim_res_x, config.sim_res_y, 1
+    );
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -76,11 +89,11 @@ void Application::init_context() {
 }
 
 void Application::init_screen_quad() {
-  glGenVertexArrays(1, &screen_quad_VAO);
-  glBindVertexArray(screen_quad_VAO);
+  glGenVertexArrays(1, &screen_quad_vao);
+  glBindVertexArray(screen_quad_vao);
 
-  glGenBuffers(1, &screen_quad_VBO);
-  glBindBuffer(GL_ARRAY_BUFFER, screen_quad_VBO);
+  glGenBuffers(1, &screen_quad_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, screen_quad_vbo);
   constexpr float vertex_data[] = {
      1.0f,  1.0f, 1.0f, 1.0f,
      1.0f, -1.0f, 1.0f, 0.0f,
@@ -89,8 +102,8 @@ void Application::init_screen_quad() {
   };
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
 
-  glGenBuffers(1, &screen_quad_EBO);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, screen_quad_EBO);
+  glGenBuffers(1, &scree_quad_ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scree_quad_ebo);
   constexpr unsigned int indices[] = {
     0, 1, 3,
     1, 2, 3
@@ -104,7 +117,7 @@ void Application::init_screen_quad() {
   glEnableVertexAttribArray(1);
 }
 
-void Application::init_screen_quad_shaders() {
+void Application::init_screen_quad_shader() {
   auto vertex_shader_source = Shader::load_source_from_file("shaders/screen_quad.vert");
   auto fragment_shader_source = Shader::load_source_from_file("shaders/screen_quad.frag");
   Shader vertex_shader { vertex_shader_source, GL_VERTEX_SHADER };
@@ -114,40 +127,86 @@ void Application::init_screen_quad_shaders() {
 
 void Application::render_screen_quad() const {
   screen_quad_shader->use();
-  glBindVertexArray(screen_quad_VAO);
+  glBindVertexArray(screen_quad_vao);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 }
 
-void Application::init_screen_texture() {
-  glGenTextures(1, &screen_texture);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, screen_texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, config.sim_res_x, config.sim_res_y, 0, GL_RGBA, GL_FLOAT, nullptr);
-  glBindImageTexture(0, screen_texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+void Application::init_screen_textures() {
+  glGenTextures(2, screen_textures.data());
+  for (std::size_t i = 0; i < screen_textures.size(); ++i) {
+    glActiveTexture(GL_TEXTURE0 + i);
+    glBindTexture(GL_TEXTURE_2D, screen_textures[i]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, config.sim_res_x, config.sim_res_y, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glBindImageTexture(i, screen_textures[i], 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+  }
 }
 
-void Application::init_compute_shaders() {
-  auto compute_shader_source = Shader::load_source_from_file("shaders/screen_quad.comp");
+void Application::init_agents_ssbo() {
+  struct Agent {
+    glm::vec2 position;
+    glm::vec2 velocity;
+  };
+
+  std::vector<Agent> agents(config.agent_count);
+  std::random_device dev;
+  std::mt19937 rng { dev() };
+  std::uniform_real_distribution<float> dist;
+  for (auto& [pos, vel] : agents) {
+    pos = { dist(rng), dist(rng) };
+
+    float angle = 2.0 * glm::pi<float>() * dist(rng);
+    vel = { glm::cos(angle), glm::sin(angle) };
+    vel *= 0.075;
+  }
+
+  glGenBuffers(1, &agents_ssbo);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, agents_ssbo);
+  std::size_t buffer_size = agents.size() * sizeof(Agent);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, agents.data(), GL_DYNAMIC_COPY);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, agents_ssbo);
+}
+
+void Application::init_agents_update_shader() {
+  auto compute_shader_source = Shader::load_source_from_file("shaders/agents_update.comp");
   Shader compute_shader { compute_shader_source, GL_COMPUTE_SHADER };
-  screen_compute_shader = std::make_unique<ComputeShaderProgram>(compute_shader);
+  agents_update_shader = std::make_unique<ComputeShaderProgram>(compute_shader);
 }
 
-void Application::dispatch_compute_shaders() const {
-  screen_compute_shader->use();
-  screen_compute_shader->set_uniform("resolution", glm::ivec2(config.sim_res_x, config.sim_res_y));
+void Application::dispatch_agents_update_shader() const {
+  agents_update_shader->use();
   static int seed = [] {
     std::random_device dev;
     std::mt19937 rng { dev() };
     std::uniform_int_distribution<int> dist;
     return dist(rng);
   } ();
-  screen_compute_shader->set_uniform("seed", seed);
+  agents_update_shader->set_uniform("seed", seed);
+  agents_update_shader->set_uniform("resolution", glm::ivec2(config.sim_res_x, config.sim_res_y));
+  agents_update_shader->set_uniform("agent_count", config.agent_count);
+  agents_update_shader->set_uniform("dt", delta_time);
 
-  static glm::ivec3 local_group_size = screen_compute_shader->local_group_size();
+  static unsigned int local_group_size = agents_update_shader->local_group_size().x;
+  unsigned int group_count = (config.agent_count + local_group_size - 1) / local_group_size;
+  glDispatchCompute(group_count, 1, 1);
+  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+}
+
+void Application::init_screen_update_shader() {
+  auto compute_shader_source = Shader::load_source_from_file("shaders/screen_update.comp");
+  Shader compute_shader { compute_shader_source, GL_COMPUTE_SHADER };
+  screen_update_shader = std::make_unique<ComputeShaderProgram>(compute_shader);
+}
+
+void Application::dispatch_screen_update_shader() const {
+  screen_update_shader->use();
+  screen_update_shader->set_uniform("resolution", glm::ivec2(config.sim_res_x, config.sim_res_y));
+  screen_update_shader->set_uniform("dt", delta_time);
+
+  static glm::ivec3 local_group_size = screen_update_shader->local_group_size();
   unsigned int group_count_x = (config.sim_res_x + local_group_size.x - 1) / local_group_size.x;
   unsigned int group_count_y = (config.sim_res_y + local_group_size.y - 1) / local_group_size.y;
   glDispatchCompute(group_count_x, group_count_y, 1);

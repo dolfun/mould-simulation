@@ -8,8 +8,9 @@ int main() {
       .window_x = 1024,
       .window_y = 768,
       .fullscreen = false,
-      .sim_res_x = 64,
-      .sim_res_y = 64,
+      .sim_res_x = 400,
+      .sim_res_y = 300,
+      .agent_count = 64,
     };
 
     Application app { config };

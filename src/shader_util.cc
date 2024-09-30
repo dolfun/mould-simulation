@@ -66,6 +66,11 @@ void ShaderProgram::set_uniform<int>(const std::string& name, const int& val) co
 }
 
 template <>
+void ShaderProgram::set_uniform<unsigned int>(const std::string& name, const unsigned int& val) const {
+  glUniform1ui(glGetUniformLocation(id, name.c_str()), val);
+}
+
+template <>
 void ShaderProgram::set_uniform<float>(const std::string& name, const float& val) const {
   glUniform1f(glGetUniformLocation(id, name.c_str()), val);
 }

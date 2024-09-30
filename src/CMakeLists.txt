@@ -17,4 +17,5 @@ endfunction()
 
 add_shader(shaders/screen_quad.vert)
 add_shader(shaders/screen_quad.frag)
-add_shader(shaders/screen_quad.comp)
+add_shader(shaders/screen_update.comp)
+add_shader(shaders/agents_update.comp)
