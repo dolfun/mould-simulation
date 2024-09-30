@@ -1,4 +1,6 @@
 #pragma once
+#include "shader_util.h"
+#include <memory>
 
 struct GLFWwindow;
 
@@ -24,5 +26,11 @@ private:
 
   GLFWwindow* window;
   void init_context();
+
+  unsigned int screen_quad_VAO, screen_quad_VBO, screen_quad_EBO;
+  std::unique_ptr<GraphicsShaderProgram> screen_quad_shader;
+  void init_screen_quad();
+  void render_screen_quad() const;
+
   void process_input();
 };
