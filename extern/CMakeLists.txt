@@ -18,5 +18,6 @@ set (
 )
 add_library(imgui ${imgui_sources})
 target_include_directories(imgui PUBLIC imgui/ imgui/backends)
+target_link_libraries(imgui PRIVATE glfw)
 
 configure_file(VeraMono.ttf ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/VeraMono.ttf COPYONLY)
