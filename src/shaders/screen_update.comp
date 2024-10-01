@@ -1,27 +1,32 @@
 #version 450 core
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-layout (rgba32f, binding = 1) uniform image2D inputImage;
-layout (rgba32f, binding = 0) uniform image2D outputImage;
-
-struct Agent {
-  vec2 pos;
-  vec2 vel;
-};
-
-layout (std430, binding = 0) buffer agents_SSBO {
-  Agent agents[];
-};
+layout (rgba32f, binding = 1) uniform image2D input_image;
+layout (rgba32f, binding = 0) uniform image2D output_image;
 
 uniform ivec2 resolution;
+uniform float diffuse_rate;
+uniform float evaporate_rate;
 uniform float dt;
 
 void main() {
-  ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
-  if (texelCoord.x >= resolution.x || texelCoord.y >= resolution.y) return;
+  ivec2 texel_coord = ivec2(gl_GlobalInvocationID.xy);
+  if (texel_coord.x >= resolution.x || texel_coord.y >= resolution.y) return;
 
-  vec3 color = imageLoad(inputImage, texelCoord).rgb;
+  vec3 original_color = imageLoad(input_image, texel_coord).rgb;
+
+  vec3 blur_color = vec3(0.0);
+  for (int dx = -1; dx <= 1; ++dx) {
+    for (int dy = -1; dy <= 1; ++dy) {
+      int sample_x = texel_coord.x + dx, sample_y = texel_coord.y + dy;
+      if (sample_x >= 0 && sample_x < resolution.x && sample_y >= 0 && sample_y < resolution.y) {
+        blur_color += imageLoad(input_image, ivec2(sample_x, sample_y)).rgb;
+      }
+    }
+  }
+  blur_color /= 9.0;
   
-  color = max(vec3(0.0), color - 1.0 * dt);
+  vec3 diffused_color = mix(original_color, blur_color, diffuse_rate * dt);
+  vec3 evaporated_color = max(vec3(0.0), diffused_color - evaporate_rate * dt);
 
-  imageStore(outputImage, texelCoord, vec4(color, 1.0));
+  imageStore(output_image, texel_coord, vec4(evaporated_color, 1.0));
 }

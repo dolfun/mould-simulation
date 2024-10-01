@@ -54,6 +54,8 @@ void Application::run() {
     float current_time = glfwGetTime();
     delta_time = current_time - prev_time;
     prev_time = current_time;
+    ++frame_count;
+    // delta_time = 1.0f / 144.0f;
 
     update_title();
     process_input();
@@ -117,8 +119,16 @@ void Application::init_imgui() {
   ImGui_ImplOpenGL3_Init();
 }
 
-void Application::render_ui() const {
-  ImGui::ShowDemoWindow();
+void Application::render_ui() {
+  ImGui::Begin("Config");
+  ImGui::SliderFloat("Agent Speed", &config.agent_speed, 0.0, 1.0);
+  ImGui::SliderFloat("Turn Speed", &config.turn_speed, 0.0, 25.0);
+  ImGui::SliderFloat("Diffuse Rate", &config.diffuse_rate, 0.0, 200.0);
+  ImGui::SliderFloat("Evaporate Rate", &config.evaporate_rate, 0.0, 10.0);
+  ImGui::SliderFloat("Sensor Span", &config.sensor_span, 0.0, 180.0);
+  ImGui::SliderFloat("Sensor Range", &config.sensor_range, 0.0, 0.1);
+  ImGui::SliderInt("Sensor Size", &config.sensor_size, 0, 3);
+  ImGui::End();
 }
 
 void Application::init_screen_quad() {
@@ -179,21 +189,24 @@ void Application::init_screen_textures() {
 }
 
 void Application::init_agents_ssbo() {
-  struct Agent {
+  struct alignas(16) Agent {
     glm::vec2 position;
-    glm::vec2 velocity;
+    glm::vec2 direction;
+    glm::vec3 color;
   };
 
   std::vector<Agent> agents(config.agent_count);
   std::random_device dev;
   std::mt19937 rng { dev() };
   std::uniform_real_distribution<float> dist;
-  for (auto& [pos, vel] : agents) {
+  for (auto& [pos, dir, color] : agents) {
     pos = { dist(rng), dist(rng) };
 
-    float angle = 2.0 * glm::pi<float>() * dist(rng);
-    vel = { glm::cos(angle), glm::sin(angle) };
-    vel *= 0.075;
+    float angle = 2.0f * glm::pi<float>() * dist(rng);
+    dir = { glm::cos(angle), glm::sin(angle) };
+
+    color = glm::vec3(1.0f);
+    // color = glm::mix(glm::vec3(1.0f, 0.5f, 0.25f), glm::vec3(0.25f, 1.0f, 0.7f), glm::length(pos - glm::vec2(0.5f)) / glm::sqrt(2.0f));
   }
 
   glGenBuffers(1, &agents_ssbo);
@@ -218,8 +231,14 @@ void Application::dispatch_agents_update_shader() const {
     return dist(rng);
   } ();
   agents_update_shader->set_uniform("seed", seed);
+  agents_update_shader->set_uniform("frame_count", frame_count);
   agents_update_shader->set_uniform("resolution", glm::ivec2(config.sim_res_x, config.sim_res_y));
   agents_update_shader->set_uniform("agent_count", config.agent_count);
+  agents_update_shader->set_uniform("agent_speed", config.agent_speed);
+  agents_update_shader->set_uniform("turn_speed", config.turn_speed);
+  agents_update_shader->set_uniform("sensor_span", glm::radians(config.sensor_span));
+  agents_update_shader->set_uniform("sensor_range", config.sensor_range);
+  agents_update_shader->set_uniform("sensor_size", config.sensor_size);
   agents_update_shader->set_uniform("dt", delta_time);
 
   static unsigned int local_group_size = agents_update_shader->local_group_size().x;
@@ -237,6 +256,8 @@ void Application::init_screen_update_shader() {
 void Application::dispatch_screen_update_shader() const {
   screen_update_shader->use();
   screen_update_shader->set_uniform("resolution", glm::ivec2(config.sim_res_x, config.sim_res_y));
+  screen_update_shader->set_uniform("diffuse_rate", config.diffuse_rate);
+  screen_update_shader->set_uniform("evaporate_rate", config.evaporate_rate);
   screen_update_shader->set_uniform("dt", delta_time);
 
   static glm::ivec3 local_group_size = screen_update_shader->local_group_size();
@@ -263,11 +284,11 @@ void Application::process_input() {
   }
 
   static bool to_render_ui_key_pressed = false;
-  if (glfwGetKey(window, GLFW_KEY_F12) == GLFW_PRESS && !to_render_ui_key_pressed) {
+  if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !to_render_ui_key_pressed) {
     to_render_ui_key_pressed = true;
     to_render_ui = !to_render_ui;
 
-  } else if (glfwGetKey(window, GLFW_KEY_F12) == GLFW_RELEASE) {
+  } else if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
     to_render_ui_key_pressed = false;
   }
 }

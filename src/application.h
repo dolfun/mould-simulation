@@ -11,6 +11,13 @@ struct ApplicationConfig {
 
   unsigned int sim_res_x, sim_res_y;
   unsigned int agent_count;
+
+  float agent_speed, turn_speed;
+  float diffuse_rate, evaporate_rate;
+
+  float sensor_span;
+  float sensor_range;
+  int sensor_size;
 };
 
 class Application {
@@ -31,9 +38,9 @@ private:
   GLFWwindow* window;
   void init_context();
 
-  bool to_render_ui = true;
+  bool to_render_ui = false;
   void init_imgui();
-  void render_ui() const;
+  void render_ui();
 
   unsigned int screen_quad_vao, screen_quad_vbo, scree_quad_ebo;
   std::unique_ptr<GraphicsShaderProgram> screen_quad_shader;
@@ -58,4 +65,5 @@ private:
   void process_input();
 
   float delta_time;
+  int frame_count = 0;
 };

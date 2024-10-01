@@ -1,11 +1,12 @@
 #version 450 core
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-layout (rgba32f, binding = 0) uniform image2D inputImage;
-layout (rgba32f, binding = 1) uniform image2D outputImage;
+layout (local_size_x = 16, local_size_y = 1, local_size_z = 1) in;
+layout (rgba32f, binding = 0) uniform image2D input_image;
+layout (rgba32f, binding = 1) uniform image2D output_image;
 
 struct Agent {
   vec2 pos;
-  vec2 vel;
+  vec2 dir;
+  vec3 col;
 };
 
 layout(std430, binding = 0) buffer agents_SSBO {
@@ -13,39 +14,100 @@ layout(std430, binding = 0) buffer agents_SSBO {
 };
 
 uniform int seed;
+uniform int frame_count;
 uniform ivec2 resolution;
 uniform uint agent_count;
+uniform float agent_speed;
+uniform float turn_speed;
+uniform float sensor_span;
+uniform float sensor_range;
+uniform int sensor_size;
 uniform float dt;
+
+// https://nullprogram.com/blog/2018/07/31/
+void triple32(inout uint x) {
+  x ^= x >> 17;
+  x *= 0xed5ad4bbU;
+  x ^= x >> 11;
+  x *= 0xac4c1b51U;
+  x ^= x >> 15;
+  x *= 0x31848babU;
+  x ^= x >> 14;
+}
+
+uint rand_state;
+float rand_float() {
+  triple32(rand_state);
+  return float(rand_state) / float(~0u);
+}
+
+float sense(vec2 center, float angle) {
+  vec2 dir = vec2(cos(angle), sin(angle));
+  center += dir * sensor_range;
+
+  // imageStore(output_image, ivec2(center * vec2(resolution)), vec4(0.0, 1.0, 1.0, 1.0));
+
+  float sum = 0;
+  for (int dx = -sensor_size; dx <= sensor_size; ++dx) {
+    for (int dy = -sensor_size; dy <= sensor_size; ++dy) {
+      ivec2 pos = ivec2(center * resolution) + ivec2(dx, dy);
+      if (pos.x >= 0 && pos.x < resolution.x && pos.y >= 0 && pos.y < resolution.y) {
+        sum += dot(vec3(1.0 / 3.0), imageLoad(input_image, pos).rgb);
+      }
+    }
+  }
+
+  return sum;
+}
 
 void main() {
   uint id = gl_GlobalInvocationID.x;
   if (id >= agent_count) return;
+  rand_state = id ^ frame_count ^ seed;
 
-  vec2 pos = agents[id].pos, vel = agents[id].vel;
+  vec2 pos = agents[id].pos, dir = agents[id].dir;
+  float angle = atan(dir.y, dir.x);
 
-  pos += vel * dt;
+  float weight_fwd = sense(pos, angle);
+  float weight_ccw = sense(pos, angle + sensor_span / 2.0);
+  float weight_cw = sense(pos, angle - sensor_span / 2.0);
+
+  float rand_steer = rand_float();
+  if (weight_fwd > weight_ccw && weight_fwd > weight_cw) {
+    angle += 0.0;
+  } else if (weight_fwd < weight_ccw && weight_fwd < weight_cw) {
+    angle += 2.0 * (rand_steer - 0.5) * turn_speed * dt;
+  } else if (weight_ccw > weight_cw) {
+    angle += rand_steer * turn_speed * dt;
+  } else if (weight_cw > weight_ccw) {
+    angle -= rand_steer * turn_speed * dt;
+  }
+
+  dir = vec2(cos(angle), sin(angle));
+
+  pos += agent_speed * dir * dt;
   if (pos.x < 0.0) {
     pos.x = 0.0;
-    vel.x *= -1.0;
+    dir.x *= -1.0;
   }
 
   if (pos.x > 1.0) {
     pos.x = 1.0;
-    vel.x *= -1.0;
+    dir.x *= -1.0;
   }
 
   if (pos.y < 0.0) {
     pos.y = 0.0;
-    vel.y *= -1.0;
+    dir.y *= -1.0;
   }
 
   if (pos.y > 1.0) {
     pos.y = 1.0;
-    vel.y *= -1.0;
+    dir.y *= -1.0;
   }
 
-  ivec2 texelCoord = ivec2(round(pos * vec2(resolution)));
-  imageStore(outputImage, texelCoord, vec4(1.0));
+  ivec2 texel_coord = ivec2(pos * vec2(resolution));
+  imageStore(output_image, texel_coord, vec4(agents[id].col, 1.0));
 
-  agents[id].pos = pos, agents[id].vel = vel;
+  agents[id].pos = pos, agents[id].dir = dir;
 }
